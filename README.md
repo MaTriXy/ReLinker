@@ -1,10 +1,17 @@
-# ReLinker 
+<h1 align="center">
+	<img src="https://raw.githubusercontent.com/KeepSafe/ReLinker/1.2/web/logo.png" width="256" height="256" alt="ReLinker"><br/>
+	ReLinker
+</h1>
 
-[![Release](https://img.shields.io/github/tag/KeepSafe/ReLinker.svg?label=maven)](https://jitpack.io/#KeepSafe/ReLinker)
+[![Build Status](https://travis-ci.org/KeepSafe/ReLinker.svg?branch=master)](https://travis-ci.org/KeepSafe/ReLinker) [![Release](https://img.shields.io/github/tag/KeepSafe/ReLinker.svg?label=jitpack)](https://jitpack.io/#KeepSafe/ReLinker)
+[![Download](https://api.bintray.com/packages/keepsafesoftware/Android/ReLinker/images/download.svg) ](https://bintray.com/keepsafesoftware/Android/ReLinker/_latestVersion)
+
 
 A robust native library loader for Android. More information can be found in our [blog post](https://medium.com/keepsafe-engineering/the-perils-of-loading-native-libraries-on-android-befa49dce2db)
 
  **Min SDK:** 9
+ 
+ [JavaDoc](https://jitpack.io/com/github/KeepSafe/Relinker/1.2.3/javadoc/)
 
 ## Overview
 
@@ -14,13 +21,13 @@ The Android `PackageManager`'s native library loading is unreliable. Occasionall
 java.lang.UnsatisfiedLinkError: Couldn't load stlport_shared from loader dalvik.system.PathClassLoader: findLibrary returned null
 at java.lang.Runtime.loadLibrary(Runtime.java:365)
 at java.lang.System.loadLibrary(System.java:535)
-at com.kii.safe.Native.<clinit>(Native.java:16)
+at com.your.app.NativeClass.<clinit>(Native.java:16)
 ... 63 more
 
 Caused by: java.lang.UnsatisfiedLinkError: Library stlport_shared not found
 at java.lang.Runtime.loadLibrary(Runtime.java:461)
 at java.lang.System.loadLibrary(System.java:557)
-at com.kii.safe.Native.<clinit>(Native.java:16)
+at com.your.app.NativeClass.<clinit>(Native.java:16)
 ... 5 more
 ```
 
@@ -30,20 +37,19 @@ Note that this library fixes intermittent link errors; if you get an error every
 
 ## Installation
 
-ReLinker is distributed using [jitpack](https://jitpack.io).
-
-To use ReLinker in your project, add the following to your gradle build file:
+ReLinker is distributed using [jcenter](https://bintray.com/keepsafesoftware/Android/ReLinker/view).
 
 ```groovy
    repositories { 
         jcenter()
-        maven { url "https://jitpack.io" }
    }
    
    dependencies {
-         compile 'com.github.KeepSafe:ReLinker:1.1'
+         compile 'com.getkeepsafe.relinker:relinker:1.2.3'
    }
 ```
+
+If you wish, you may also use ReLinker with [jitpack](https://jitpack.io/#KeepSafe/ReLinker)
 
 ## Usage
 
@@ -59,13 +65,70 @@ With a call to `ReLinker.loadLibrary` like this:
 ReLinker.loadLibrary(context, "mylibrary");
 ```
 
+## Advanced Usage
+
+### Asynchronous loading
+
+ReLinker can load libraries asynchronously. Simply pass a `LoadListener` instance to the `loadLibrary` call:
+```java
+ReLinker.loadLibrary(context, "mylibrary", new ReLinker.LoadListener() {
+    @Override
+    public void success() { /* Yay */ }
+
+    @Override
+    public void failure(Throwable t) { /* Boo */ }
+});
+```
+
+### Recursive loading
+
+On older versions of Android, the system's library loader may fail to resolve intra-library dependencies. In this instance, ReLinker can resolve those dependencies for you. This will recursively load all libraries defined as "needed" by each library. 
+
+For example, if you have a library `libchild` that relies on `libparent`, then `libchild` will have an entry in its shared object file defining that. ReLinker will parse the shared object file and determine that `libchild` needs `libparent`. ReLinker will then proceed to load `libparent` (and any dependencies it may have) and then `libchild`.  
+
+To allow ReLinker to recursively load and resolve intra-library dependencies simply modify your `loadLibrary` call with the `recursively` modifier, like so:
+```java
+ReLinker.recursively().loadLibrary(context, "mylibrary");
+```
+
+### Logging
+
+To help facilitate debugging, ReLinker can log messages to a `Logger` instance you provide:
+```java
+ReLinker.log(myLogger).loadLibrary(context, "mylibrary");
+```
+
+Which will log the following messages during a normal / successful execution:
+```
+D/ReLinker: Beginning load of mylibrary...
+D/ReLinker: mylibrary was not loaded normally, re-linking...
+D/ReLinker: Looking for lib/x86/libmylibrary.so in APK...
+D/ReLinker: Found lib/x86/libmylibrary.so! Extracting...
+D/ReLinker: mylibrary was re-linked!
+```
+
+### Versioning
+
+In the event that your library's code is changed, it is a good idea to specify a specific version. Doing so will allow ReLinker to update the workaround library file successfully. In the case that the system handles the library loading appropriately, the version specified is not used as all library files are extracted and replaced on update or install. 
+
+To specify a version for your library simply provide it as an additional parameter for `loadLibrary` like:
+```java
+ReLinker.loadLibrary(context, "mylibrary", "1.0");
+```
+
+This will cause ReLinker to look for, and load `libmylibrary.so.1.0`. Subsequent version updates will automatically clean up all other library versions.
+
 ## Sample application
 
 See the sample application under `sample/` for a quick demo.
 
+## Acknowledgements
+
+Special thanks to [Jeff Young](https://github.com/tenoversix) for the awesome logo!
+
 ## License
 
-    Copyright 2015 KeepSafe Inc.
+    Copyright 2015 - 2016 Keepsafe Software Inc.
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
