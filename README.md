@@ -3,15 +3,16 @@
 	ReLinker
 </h1>
 
-[![Build Status](https://travis-ci.org/KeepSafe/ReLinker.svg?branch=master)](https://travis-ci.org/KeepSafe/ReLinker) [![Release](https://img.shields.io/github/tag/KeepSafe/ReLinker.svg?label=jitpack)](https://jitpack.io/#KeepSafe/ReLinker)
-[![Download](https://api.bintray.com/packages/keepsafesoftware/Android/ReLinker/images/download.svg) ](https://bintray.com/keepsafesoftware/Android/ReLinker/_latestVersion)
+[![Build Status](https://travis-ci.org/KeepSafe/ReLinker.svg?branch=master)](https://travis-ci.org/KeepSafe/ReLinker)
+[![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.getkeepsafe.relinker/relinker/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.getkeepsafe.relinker/relinker)
+[![Release](https://img.shields.io/github/tag/KeepSafe/ReLinker.svg?label=jitpack)](https://jitpack.io/#KeepSafe/ReLinker)
 
 
 A robust native library loader for Android. More information can be found in our [blog post](https://medium.com/keepsafe-engineering/the-perils-of-loading-native-libraries-on-android-befa49dce2db)
 
  **Min SDK:** 9
- 
- [JavaDoc](https://jitpack.io/com/github/KeepSafe/Relinker/1.2.3/javadoc/)
+
+ [JavaDoc](https://jitpack.io/com/github/KeepSafe/Relinker/latest/javadoc/)
 
 ## Overview
 
@@ -35,17 +36,23 @@ ReLinker fixes these issues by replacing the standard `System.loadLibrary` call 
 
 Note that this library fixes intermittent link errors; if you get an error every time you use your app, you may have a configuration issue. See [this StackOverflow question](http://stackoverflow.com/questions/27421134/system-loadlibrary-couldnt-find-native-library-in-my-case) for more information.
 
+## Who needs ReLinker?
+
+If your app includes native libraries, and your minimum SDK is below API 23 (Marshmallow), you need ReLinker.
+
+There are a number of different bugs addressed by ReLinker; the last of these was resolved as of Marshmallow.  As long as your app's min SDK is at or above it, loading libraries via `System.loadLibrary("foo")` is safe.
+
 ## Installation
 
-ReLinker is distributed using [jcenter](https://bintray.com/keepsafesoftware/Android/ReLinker/view).
+ReLinker is distributed using [MavenCentral](https://search.maven.org/artifact/com.getkeepsafe.relinker/relinker).
 
 ```groovy
    repositories { 
-        jcenter()
+        mavenCentral()
    }
    
    dependencies {
-         compile 'com.getkeepsafe.relinker:relinker:1.2.3'
+         compile 'com.getkeepsafe.relinker:relinker:x.x.x'
    }
 ```
 

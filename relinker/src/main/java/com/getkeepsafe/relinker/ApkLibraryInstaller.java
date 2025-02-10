@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2015 - 2016 KeepSafe Software, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +15,10 @@
  */
 package com.getkeepsafe.relinker;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
+import android.os.Build;
 
 import java.io.Closeable;
 import java.io.File;
@@ -25,6 +27,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -32,34 +39,49 @@ public class ApkLibraryInstaller implements ReLinker.LibraryInstaller {
     private static final int MAX_TRIES = 5;
     private static final int COPY_BUFFER_SIZE = 4096;
 
-    /**
-     * Attempts to unpack the given library to the given destination. Implements retry logic for
-     * IO operations to ensure they succeed.
-     *
-     * @param context {@link Context} to describe the location of the installed APK file
-     * @param mappedLibraryName The mapped name of the library file to load
-     */
-    @SuppressWarnings("ResultOfMethodCallIgnored")
-    @Override
-    public void installLibrary(final Context context,
-                               final String[] abis,
-                               final String mappedLibraryName,
-                               final File destination,
-                               final ReLinkerInstance instance) {
-        ZipFile zipFile = null;
-        try {
-            final ApplicationInfo appInfo = context.getApplicationInfo();
+    private String[] sourceDirectories(final Context context) {
+        final ApplicationInfo appInfo = context.getApplicationInfo();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP &&
+            appInfo.splitSourceDirs != null &&
+            appInfo.splitSourceDirs.length != 0) {
+            String[] apks = new String[appInfo.splitSourceDirs.length + 1];
+            apks[0] = appInfo.sourceDir;
+            System.arraycopy(appInfo.splitSourceDirs, 0, apks, 1, appInfo.splitSourceDirs.length);
+            return apks;
+        } else {
+            return new String[] { appInfo.sourceDir };
+        }
+    }
+
+    private static class ZipFileInZipEntry {
+        public ZipFile zipFile;
+        public ZipEntry zipEntry;
+
+        public ZipFileInZipEntry(ZipFile zipFile, ZipEntry zipEntry) {
+            this.zipFile = zipFile;
+            this.zipEntry = zipEntry;
+        }
+    }
+
+    private ZipFileInZipEntry findAPKWithLibrary(final Context context,
+                                                 final String[] abis,
+                                                 final String mappedLibraryName,
+                                                 final ReLinkerInstance instance) {
+
+        for (String sourceDir : sourceDirectories(context)) {
+            ZipFile zipFile = null;
             int tries = 0;
             while (tries++ < MAX_TRIES) {
                 try {
-                    zipFile = new ZipFile(new File(appInfo.sourceDir), ZipFile.OPEN_READ);
+                    zipFile = new ZipFile(new File(sourceDir), ZipFile.OPEN_READ);
                     break;
-                } catch (IOException ignored) {}
+                } catch (IOException ignored) {
+                }
             }
 
             if (zipFile == null) {
-                instance.log("FATAL! Couldn't find application APK!");
-                return;
+                continue;
             }
 
             tries = 0;
@@ -70,25 +92,92 @@ public class ApkLibraryInstaller implements ReLinker.LibraryInstaller {
                 for (final String abi : abis) {
                     jniNameInApk = "lib" + File.separatorChar + abi + File.separatorChar
                             + mappedLibraryName;
+
+                    instance.log("Looking for %s in APK %s...", jniNameInApk, sourceDir);
+
                     libraryEntry = zipFile.getEntry(jniNameInApk);
 
                     if (libraryEntry != null) {
-                        break;
+                        return new ZipFileInZipEntry(zipFile, libraryEntry);
                     }
                 }
+            }
 
-                if (jniNameInApk != null) instance.log("Looking for %s in APK...", jniNameInApk);
+            try {
+                zipFile.close();
+            } catch (IOException ignored) {
+            }
+        }
 
-                if (libraryEntry == null) {
-                    // Does not exist in the APK
-                    if (jniNameInApk != null) {
-                        throw new MissingLibraryException(jniNameInApk);
-                    } else {
-                        throw new MissingLibraryException(mappedLibraryName);
-                    }
+        return null;
+    }
+
+    // Loop over all APK's again in order to detect which ABI's are actually supported.
+    // This second loop is more expensive than trying to find a specific ABI, so it should
+    // only be ran when no matching libraries are found. This should keep the overhead of
+    // the happy path to a minimum.
+    private String[] getSupportedABIs(Context context, String mappedLibraryName) {
+        String p = "lib" + File.separatorChar + "([^\\" + File.separatorChar + "]*)" + File.separatorChar + mappedLibraryName;
+        Pattern pattern = Pattern.compile(p);
+        ZipFile zipFile;
+        Set<String> supportedABIs = new HashSet<String>();
+        for (String sourceDir : sourceDirectories(context)) {
+            try {
+                zipFile = new ZipFile(new File(sourceDir), ZipFile.OPEN_READ);
+            } catch (IOException ignored) {
+                continue;
+            }
+
+            Enumeration<? extends ZipEntry> elements = zipFile.entries();
+            while (elements.hasMoreElements()) {
+                ZipEntry el = elements.nextElement();
+                Matcher match = pattern.matcher(el.getName());
+                if (match.matches()) {
+                    supportedABIs.add(match.group(1));
                 }
+            }
+        }
 
-                instance.log("Found %s! Extracting...", jniNameInApk);
+        String[] result = new String[supportedABIs.size()];
+        return supportedABIs.toArray(result);
+    }
+
+    /**
+     * Attempts to unpack the given library to the given destination. Implements retry logic for
+     * IO operations to ensure they succeed.
+     *
+     * @param context {@link Context} to describe the location of the installed APK file
+     * @param mappedLibraryName The mapped name of the library file to load
+     */
+    @SuppressLint ("SetWorldReadable")
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    @Override
+    public void installLibrary(final Context context,
+                               final String[] abis,
+                               final String mappedLibraryName,
+                               final File destination,
+                               final ReLinkerInstance instance) {
+        ZipFileInZipEntry found = null;
+        try {
+            found = findAPKWithLibrary(context, abis, mappedLibraryName, instance);
+            if (found == null) {
+                // Does not exist in any APK. Report exactly what ReLinker is looking for and
+                // what is actually supported by the APK.
+                String[] supportedABIs;
+                try {
+                    supportedABIs = getSupportedABIs(context, mappedLibraryName);
+                } catch (Exception e) {
+                    // Should never happen as this indicates a bug in ReLinker code, but just to be safe.
+                    // User code should only ever crash with a MissingLibraryException if getting this far.
+                    supportedABIs = new String[1];
+                    supportedABIs[0] = e.toString();
+                }
+                throw new MissingLibraryException(mappedLibraryName, abis, supportedABIs);
+            }
+
+            int tries = 0;
+            while (tries++ < MAX_TRIES) {
+                instance.log("Found %s! Extracting...", mappedLibraryName);
                 try {
                     if (!destination.exists() && !destination.createNewFile()) {
                         continue;
@@ -101,7 +190,7 @@ public class ApkLibraryInstaller implements ReLinker.LibraryInstaller {
                 InputStream inputStream = null;
                 FileOutputStream fileOut = null;
                 try {
-                    inputStream = zipFile.getInputStream(libraryEntry);
+                    inputStream = found.zipFile.getInputStream(found.zipEntry);
                     fileOut = new FileOutputStream(destination);
                     final long written = copy(inputStream, fileOut);
                     fileOut.getFD().sync();
@@ -130,8 +219,8 @@ public class ApkLibraryInstaller implements ReLinker.LibraryInstaller {
             instance.log("FATAL! Couldn't extract the library from the APK!");
         } finally {
             try {
-                if (zipFile != null) {
-                    zipFile.close();
+                if (found != null && found.zipFile != null) {
+                    found.zipFile.close();
                 }
             } catch (IOException ignored) {}
         }

@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2015 - 2016 KeepSafe Software, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -74,7 +74,7 @@ public class ReLinkerInstance {
     }
 
     /**
-     * Enables recursive library loading to resolve and load shared object -> shared object
+     * Enables recursive library loading to resolve and load shared object -&gt; shared object
      * defined dependencies
      */
     public ReLinkerInstance recursively() {
@@ -183,8 +183,16 @@ public class ReLinkerInstance {
 
         try {
             if (recursive) {
-                final ElfParser parser = new ElfParser(workaroundFile);
-                final List<String> dependencies = parser.parseNeededDependencies();
+                ElfParser parser = null;
+                final List<String> dependencies;
+                try {
+                    parser = new ElfParser(workaroundFile);
+                    dependencies = parser.parseNeededDependencies();
+                } finally {
+                    if (parser != null) {
+                        parser.close();
+                    }
+                }
                 for (final String dependency : dependencies) {
                     loadLibrary(context, libraryLoader.unmapLibraryName(dependency));
                 }

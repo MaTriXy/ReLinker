@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2015 - 2016 KeepSafe Software, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,7 @@ import java.io.File;
 /**
  * ReLinker is a small library to help alleviate {@link UnsatisfiedLinkError} exceptions thrown due
  * to Android's inability to properly install / load native libraries for Android versions before
- * API 21
+ * API 23.
  */
 public class ReLinker {
     public interface LoadListener {

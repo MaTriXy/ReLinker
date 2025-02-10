@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright 2015 - 2016 KeepSafe Software, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +15,12 @@
  */
 package com.getkeepsafe.relinker;
 
+import java.util.Arrays;
+
 public class MissingLibraryException extends RuntimeException {
-    public MissingLibraryException(final String library) {
-        super(library);
+    public MissingLibraryException(final String library, final String[] wantedABIs, final String[] supportedABIs) {
+        super("Could not find '" + library + "'. " +
+                "Looked for: " + Arrays.toString(wantedABIs) + ", " +
+                "but only found: " + Arrays.toString(supportedABIs) + ".");
     }
 }
